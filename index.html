@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Neon Traffic City - GitHub Pages Edition</title>
+  <title>Neon Traffic City Peer Multiplayer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -183,15 +183,75 @@
       text-align: center;
     }
 
+
+    .nameTag {
+      position: fixed;
+      z-index: 4;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,.58);
+      border: 1px solid rgba(255,255,255,.24);
+      color: white;
+      font-size: 12px;
+      padding: 3px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      text-shadow: 0 0 8px black;
+    }
+
+    #p2pPanel {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 7;
+      width: 330px;
+      background: rgba(0,0,0,.52);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 16px;
+      padding: 12px 14px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      line-height: 1.35;
+      color: rgba(255,255,255,.9);
+      user-select: text;
+    }
+
+    #p2pPanel b {
+      color: #65e8ff;
+    }
+
+    #p2pPanel input {
+      width: 145px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: rgba(0,0,0,.42);
+      color: white;
+      outline: none;
+      margin: 4px 2px;
+    }
+
+    #p2pPanel button {
+      font-size: 12px;
+      padding: 8px 9px;
+      margin: 4px 2px;
+      border-radius: 10px;
+    }
+
   </style>
 </head>
 <body>
   <div id="menu">
     <div class="panel">
-      <h1>NEON TRAFFIC CITY</h1>
+      <h1>NEON TRAFFIC CITY P2P</h1>
       <p class="small">
-        Drive through a big 3D city, complete challenges, dodge traffic, collect coins, avoid NPCs, and upgrade your car. GitHub Pages edition.
+        Drive through a big 3D city with peer-to-peer multiplayer, complete challenges, dodge traffic, collect coins, avoid NPCs, and upgrade your car.
       </p>
+      <input id="playerNameInput" maxlength="16" placeholder="Your name"
+        style="border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:13px 16px;
+        font-size:17px;background:rgba(0,0,0,.42);color:white;outline:none;margin:8px;
+        width:190px;text-align:center" />
+      <br />
       <button onclick="startGame()">START GAME</button>
       <button onclick="setMode('free')">FREE DRIVE</button>
       <button onclick="setMode('rush')">TRAFFIC RUSH</button>
@@ -216,6 +276,8 @@
     <div><b>Score:</b> <span id="scoreText">0</span></div>
     <div><b>Health:</b> <span id="healthText">100</span>%</div>
     <div><b>Nitro:</b> <span id="nitroText">100</span>%</div>
+    <div><b>Online:</b> <span id="onlineText">Not connected</span></div>
+    <div><b>Players:</b> <span id="playersText">1</span></div>
     <hr style="border-color:rgba(255,255,255,.18)">
     <button onclick="buyUpgrade()" style="font-size:13px;padding:8px 10px;margin:0">Upgrade Engine - 15 coins</button>
   </div>
@@ -234,6 +296,17 @@
     WASD / Arrows drive • Space brake • Shift nitro • R reset
   </div>
 
+  <div id="p2pPanel">
+    <b>Peer Multiplayer</b><br>
+    Room code: <input id="roomInput" maxlength="18" placeholder="room123" />
+    <button onclick="hostRoom()">Host</button>
+    <button onclick="joinRoom()">Join</button>
+    <br>
+    Status: <span id="p2pStatus">Not connected</span><br>
+    <span style="color:rgba(255,255,255,.68)">One player hosts. Friends type the same room code and press Join.</span>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script>
     let scene, camera, renderer, clock;
@@ -255,6 +328,19 @@
     let running = false;
     let gameMode = "rush";
     let damageCooldown = 0;
+
+    let peer = null;
+    let isHost = false;
+    let roomCode = "";
+    let playerName = "Driver";
+    let myPeerId = "";
+    let p2pStatus = "Not connected";
+    let playerColor = 0x008cff;
+    let remotePlayers = new Map();
+    let connections = new Map();
+    let hostPlayers = {};
+    let lastP2PSend = 0;
+    const playerColors = [0x008cff, 0xff43d1, 0xffd33b, 0x6eff6e, 0x9b6eff, 0xff6b35, 0x55ffcc];
 
     let totalDistance = 0;
     let cleanDriveTime = 0;
@@ -329,6 +415,8 @@
     function startGame() {
       document.getElementById("menu").style.display = "none";
       document.getElementById("gameOver").style.display = "none";
+      playerName = (document.getElementById("playerNameInput")?.value || "Driver").trim().slice(0, 16) || "Driver";
+      playerColor = playerColors[Math.floor(Math.random() * playerColors.length)];
       init();
       running = true;
       animate();
@@ -378,6 +466,7 @@
       renderChallenges();
 
       window.addEventListener("resize", onResize);
+      window.addEventListener("beforeunload", cleanupP2P);
       document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
       document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
     }
@@ -554,6 +643,8 @@
       const underGlow = new THREE.PointLight(0x00e5ff, 1.3, 55);
       underGlow.position.set(0, 1.4, 0);
       car.add(underGlow);
+
+      if (carBody && carBody.material) carBody.material.color.setHex(playerColor);
     }
 
     function spawnTraffic(count) {
@@ -683,6 +774,8 @@
       updateChallenges(dt);
       checkCollisions(dt);
       updateCamera(dt);
+      sendP2PState();
+      updateRemotePlayers(dt);
       updateHUD();
       updateRadar();
 
@@ -856,6 +949,10 @@
       document.getElementById("scoreText").textContent = Math.floor(score);
       document.getElementById("healthText").textContent = Math.floor(health);
       document.getElementById("nitroText").textContent = Math.floor(nitro);
+      document.getElementById("onlineText").textContent = p2pStatus;
+      document.getElementById("playersText").textContent = 1 + remotePlayers.size;
+      const s = document.getElementById("p2pStatus");
+      if (s) s.textContent = p2pStatus;
     }
 
     function updateRadar() {
@@ -866,7 +963,8 @@
       const items = [
         ...traffic.slice(0, 28).map(o => [o, "trafficDot"]),
         ...coins.slice(0, 24).map(o => [o, "coinDot"]),
-        ...npcs.slice(0, 20).map(o => [o, "npcDot"])
+        ...npcs.slice(0, 20).map(o => [o, "npcDot"]),
+        ...Array.from(remotePlayers.values()).map(p => [p.group, "playerDot"])
       ];
 
       for (const [obj, cls] of items) {
@@ -960,6 +1058,355 @@
         notice.style.display = "none";
       }, 1700);
     }
+
+
+    function getRoomCode() {
+      const input = document.getElementById("roomInput");
+      let code = (input?.value || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+      if (!code) {
+        code = "room-" + Math.floor(1000 + Math.random() * 9000);
+        if (input) input.value = code;
+      }
+      return code.slice(0, 18);
+    }
+
+    function fixedHostId(code) {
+      return "neon-traffic-p2p-host-" + code;
+    }
+
+    function hostRoom() {
+      if (!window.Peer) {
+        p2pStatus = "PeerJS failed to load";
+        return;
+      }
+      if (!running) startGame();
+
+      cleanupP2P(false);
+      isHost = true;
+      roomCode = getRoomCode();
+      myPeerId = fixedHostId(roomCode);
+      p2pStatus = "Opening host...";
+
+      peer = new Peer(myPeerId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:global.stun.twilio.com:3478" }
+          ]
+        }
+      });
+
+      peer.on("open", id => {
+        p2pStatus = "Hosting: " + roomCode;
+        showChallengeNotice("Hosting room: " + roomCode);
+        hostPlayers = {};
+      });
+
+      peer.on("connection", conn => {
+        setupConnection(conn);
+        conn.on("open", () => {
+          connections.set(conn.peer, conn);
+          conn.send({ type: "welcome", hostId: myPeerId, room: roomCode });
+          broadcastHostSnapshot();
+        });
+      });
+
+      peer.on("error", err => {
+        console.error(err);
+        if (String(err?.type || "").includes("unavailable-id")) {
+          p2pStatus = "Room already hosted";
+          showChallengeNotice("Room already hosted. Pick another code.");
+        } else {
+          p2pStatus = "P2P error";
+        }
+      });
+    }
+
+    function joinRoom() {
+      if (!window.Peer) {
+        p2pStatus = "PeerJS failed to load";
+        return;
+      }
+      if (!running) startGame();
+
+      cleanupP2P(false);
+      isHost = false;
+      roomCode = getRoomCode();
+      p2pStatus = "Opening peer...";
+
+      peer = new Peer(undefined, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:global.stun.twilio.com:3478" }
+          ]
+        }
+      });
+
+      peer.on("open", id => {
+        myPeerId = id;
+        p2pStatus = "Joining: " + roomCode;
+        const conn = peer.connect(fixedHostId(roomCode), { reliable: false });
+        setupConnection(conn);
+      });
+
+      peer.on("connection", conn => setupConnection(conn));
+
+      peer.on("error", err => {
+        console.error(err);
+        p2pStatus = "Join error";
+        showChallengeNotice("Could not join. Make sure host is online.");
+      });
+    }
+
+    function setupConnection(conn) {
+      conn.on("open", () => {
+        connections.set(conn.peer, conn);
+        p2pStatus = isHost ? "Hosting: " + roomCode : "Connected: " + roomCode;
+        sendP2PState(true);
+      });
+
+      conn.on("data", data => {
+        if (!data || typeof data !== "object") return;
+
+        if (data.type === "state") {
+          if (isHost) {
+            hostPlayers[conn.peer] = data.player;
+            broadcastHostSnapshot();
+          } else {
+            handleSingleRemote(conn.peer, data.player);
+          }
+        }
+
+        if (data.type === "snapshot" && Array.isArray(data.players)) {
+          handleP2PSnapshot(data.players);
+        }
+
+        if (data.type === "leave") {
+          removeRemotePlayer(data.id);
+        }
+      });
+
+      conn.on("close", () => {
+        connections.delete(conn.peer);
+        delete hostPlayers[conn.peer];
+        removeRemotePlayer(conn.peer);
+        if (isHost) broadcastHostSnapshot();
+      });
+
+      conn.on("error", err => {
+        console.error(err);
+        connections.delete(conn.peer);
+      });
+    }
+
+    function getMyP2PState() {
+      return {
+        id: myPeerId || "local",
+        name: playerName,
+        color: playerColor,
+        x: Number(car.position.x.toFixed(2)),
+        y: Number(car.position.y.toFixed(2)),
+        z: Number(car.position.z.toFixed(2)),
+        ry: Number(car.rotation.y.toFixed(4)),
+        speed: Math.floor(Math.abs(velocity) * 2.8),
+        score: Math.floor(score),
+        health: Math.floor(health),
+        coins: coinsCollected,
+        engine: engineLevel,
+        updatedAt: Date.now()
+      };
+    }
+
+    function sendP2PState(force = false) {
+      if (!peer || !car) return;
+
+      const now = performance.now();
+      if (!force && now - lastP2PSend < 70) return;
+      lastP2PSend = now;
+
+      const me = getMyP2PState();
+
+      if (isHost) {
+        broadcastHostSnapshot();
+      } else {
+        for (const conn of connections.values()) {
+          if (conn.open) conn.send({ type: "state", player: me });
+        }
+      }
+    }
+
+    function broadcastHostSnapshot() {
+      if (!isHost || !peer || !car) return;
+
+      const players = [getMyP2PState(), ...Object.values(hostPlayers || {})];
+
+      for (const conn of connections.values()) {
+        if (conn.open) conn.send({ type: "snapshot", players });
+      }
+
+      handleP2PSnapshot(players);
+    }
+
+    function handleP2PSnapshot(players) {
+      const seen = new Set();
+      const now = Date.now();
+
+      for (const p of players) {
+        if (!p || p.id === myPeerId || p.id === "local") continue;
+        if (now - (p.updatedAt || now) > 15000) continue;
+
+        seen.add(p.id);
+        handleSingleRemote(p.id, p);
+      }
+
+      for (const [id] of remotePlayers) {
+        if (!seen.has(id)) removeRemotePlayer(id);
+      }
+    }
+
+    function handleSingleRemote(id, p) {
+      if (!p || id === myPeerId) return;
+
+      let remote = remotePlayers.get(id);
+      if (!remote) {
+        remote = createRemotePlayer(p);
+        remotePlayers.set(id, remote);
+      }
+
+      remote.target.set(p.x || 0, p.y || 2.4, p.z || 0);
+      remote.targetRy = p.ry || 0;
+      remote.speed = p.speed || 0;
+      remote.score = p.score || 0;
+      remote.health = p.health ?? 100;
+      remote.name = p.name || "Player";
+      remote.label.textContent = `${remote.name} • ${remote.speed} km/h`;
+    }
+
+    function createRemotePlayer(p) {
+      const group = new THREE.Group();
+      group.position.set(p.x || 0, p.y || 2.4, p.z || 0);
+      group.rotation.y = p.ry || 0;
+
+      const color = p.color || 0xff43d1;
+
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(15, 5, 28),
+        new THREE.MeshStandardMaterial({ color, roughness: .25, metalness: .65 })
+      );
+      body.position.y = 4;
+      body.castShadow = true;
+      group.add(body);
+
+      const cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(11, 5, 12),
+        new THREE.MeshStandardMaterial({ color: 0x101724, roughness: .15, metalness: .4 })
+      );
+      cabin.position.set(0, 8, -2);
+      cabin.castShadow = true;
+      group.add(cabin);
+
+      const spoiler = new THREE.Mesh(
+        new THREE.BoxGeometry(17, 1.2, 3),
+        new THREE.MeshStandardMaterial({ color, roughness: .2, metalness: .5 })
+      );
+      spoiler.position.set(0, 8, 13);
+      group.add(spoiler);
+
+      const light = new THREE.PointLight(color, .85, 45);
+      light.position.set(0, 4, 0);
+      group.add(light);
+
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: .55 });
+      const remoteWheels = [];
+      for (const x of [-8, 8]) {
+        for (const z of [-9, 10]) {
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(3.3, 3.3, 2.6, 18), wheelMat);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(x, 2.8, z);
+          group.add(wheel);
+          remoteWheels.push(wheel);
+        }
+      }
+
+      scene.add(group);
+
+      const label = document.createElement("div");
+      label.className = "nameTag";
+      label.textContent = p.name || "Player";
+      document.body.appendChild(label);
+
+      return {
+        group,
+        wheels: remoteWheels,
+        target: new THREE.Vector3(p.x || 0, p.y || 2.4, p.z || 0),
+        targetRy: p.ry || 0,
+        speed: p.speed || 0,
+        score: p.score || 0,
+        health: p.health ?? 100,
+        name: p.name || "Player",
+        label
+      };
+    }
+
+    function updateRemotePlayers(dt) {
+      for (const remote of remotePlayers.values()) {
+        remote.group.position.lerp(remote.target, .25);
+        remote.group.rotation.y = lerpAngle(remote.group.rotation.y, remote.targetRy, .25);
+
+        for (const w of remote.wheels) {
+          w.rotation.x += remote.speed * dt * .12;
+        }
+
+        const screenPos = remote.group.position.clone();
+        screenPos.y += 20;
+        screenPos.project(camera);
+
+        const visible =
+          screenPos.z > -1 && screenPos.z < 1 &&
+          screenPos.x > -1.2 && screenPos.x < 1.2 &&
+          screenPos.y > -1.2 && screenPos.y < 1.2;
+
+        remote.label.style.display = visible ? "block" : "none";
+        if (visible) {
+          remote.label.style.left = ((screenPos.x * .5 + .5) * innerWidth) + "px";
+          remote.label.style.top = ((-screenPos.y * .5 + .5) * innerHeight) + "px";
+        }
+      }
+    }
+
+    function removeRemotePlayer(id) {
+      const remote = remotePlayers.get(id);
+      if (!remote) return;
+      scene.remove(remote.group);
+      remote.label.remove();
+      remotePlayers.delete(id);
+    }
+
+    function cleanupP2P(destroy = true) {
+      try {
+        for (const conn of connections.values()) {
+          if (conn.open) conn.send({ type: "leave", id: myPeerId });
+          conn.close();
+        }
+      } catch {}
+      connections.clear();
+      hostPlayers = {};
+      for (const id of Array.from(remotePlayers.keys())) removeRemotePlayer(id);
+      if (destroy && peer) {
+        try { peer.destroy(); } catch {}
+      }
+      peer = null;
+      p2pStatus = "Not connected";
+    }
+
+    function lerpAngle(a, b, t) {
+      let diff = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+      return a + diff * t;
+    }
+
 
     function buyUpgrade() {
       if (coinsCollected >= 15) {

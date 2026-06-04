@@ -1,44 +1,37 @@
-# Neon Traffic City - GitHub Pages Edition
+# Neon Traffic City P2P Multiplayer
 
-A 3D car driving game made as a static HTML game for GitHub Pages.
+GitHub Pages version with multiplayer and **no Firebase**.
 
-## Features
+This uses:
+- GitHub Pages for hosting the static `index.html`
+- PeerJS/WebRTC for peer-to-peer player syncing
 
-- 3D car driving
-- Traffic cars
-- NPC pedestrians
-- City roads and buildings
-- Coins
-- Nitro
-- Engine upgrades
-- Health/crash system
-- Main menu
-- Free Drive and Traffic Rush modes
-- Radar/minimap-style dots
-- Challenges/missions
+## How multiplayer works
 
-## How to upload to GitHub
+1. One player opens the game and clicks **Host**.
+2. They pick or get a room code.
+3. Other players type the same room code and click **Join**.
+4. Player cars sync live.
 
-1. Create a new GitHub repository.
-2. Upload `index.html`, `README.md`, and `.nojekyll`.
-3. Go to **Settings**.
-4. Go to **Pages**.
-5. Under **Build and deployment**, choose:
-   - Source: `Deploy from a branch`
-   - Branch: `main`
-   - Folder: `/root`
-6. Click **Save**.
-7. GitHub will give you a website link.
+## Upload to GitHub Pages
 
-## Multiplayer note
+Upload:
 
-GitHub Pages only hosts static files, so it cannot run a WebSocket server by itself.
-That means true worldwide multiplayer needs one of these:
+- `index.html`
+- `.nojekyll`
+- `README.md`
 
-- A separate backend server
-- Firebase/Supabase realtime
-- PeerJS/WebRTC
-- Cloudflare Worker/Durable Object
-- Render/Railway/Glitch/Node server
+Then enable GitHub Pages:
 
-This version works directly on GitHub Pages as a single-player game.
+1. Repository **Settings**
+2. **Pages**
+3. Source: **Deploy from a branch**
+4. Branch: `main`
+5. Folder: `/root`
+6. Save
+
+## Important limits
+
+This version does not use Firebase or your own server, but it still uses the public PeerJS signaling service so browsers can find each other. The game data itself is sent peer-to-peer with WebRTC.
+
+If the school/PC network blocks WebRTC or PeerJS, multiplayer may not connect on that network.
