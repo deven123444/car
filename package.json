@@ -1,0 +1,17 @@
+{
+  "name": "multiplayer-car-rush",
+  "version": "1.0.0",
+  "description": "A neon local-multiplayer car arena game with game objects, boosts, and bumping.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "cars",
+    "canvas"
+  ],
+  "author": "",
+  "license": "MIT"
+}

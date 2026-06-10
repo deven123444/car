@@ -1,37 +1,57 @@
-# Neon Traffic City P2P Multiplayer
+# Neon Drift 3D: Multiplayer Car Rush
 
-GitHub Pages version with multiplayer and **no Firebase**.
+A small browser car game with a 3D chase-camera feel, real local multiplayer, game objects, boost pickups, bump scoring, and a neon city-track vibe.
 
-This uses:
-- GitHub Pages for hosting the static `index.html`
-- PeerJS/WebRTC for peer-to-peer player syncing
+## Run it
+
+If `npm` is not recognized on your computer, use the included launcher:
+
+```powershell
+.\start-game.bat
+```
+
+Or double-click `start-game.bat`.
+
+If you do have Node/npm installed globally, this also works:
+
+```powershell
+cd multiplayer-car-rush
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+For multiplayer, open the same URL in another tab. To play from another device on the same Wi-Fi, use the host computer's local IP address instead of `localhost`, for example `http://192.168.1.20:3000`.
+
+## Controls
+
+- `WASD` or arrow keys to drive
+- `Space` for turbo
+- Collect glowing turbo cells for points
+- Bump rivals while moving fast for bonus points
 
 ## How multiplayer works
 
-1. One player opens the game and clicks **Host**.
-2. They pick or get a room code.
-3. Other players type the same room code and click **Join**.
-4. Player cars sync live.
+The server uses built-in Node.js only:
 
-## Upload to GitHub Pages
+- `POST /api/join` creates a player object
+- `POST /api/state` receives local car state
+- `GET /api/events` streams everyone else's state with Server-Sent Events
 
-Upload:
+No package install is required beyond having Node.js.
 
-- `index.html`
-- `.nojekyll`
-- `README.md`
+## Putting it on GitHub
 
-Then enable GitHub Pages:
+This project is ready to push to GitHub as normal source code.
 
-1. Repository **Settings**
-2. **Pages**
-3. Source: **Deploy from a branch**
-4. Branch: `main`
-5. Folder: `/root`
-6. Save
+```powershell
+git add multiplayer-car-rush
+git commit -m "Add Neon Drift 3D multiplayer car game"
+git push
+```
 
-## Important limits
-
-This version does not use Firebase or your own server, but it still uses the public PeerJS signaling service so browsers can find each other. The game data itself is sent peer-to-peer with WebRTC.
-
-If the school/PC network blocks WebRTC or PeerJS, multiplayer may not connect on that network.
+Important: GitHub Pages can host static files, but it cannot run `server.js`, so the game falls back to solo mode there. For live multiplayer online, deploy the folder to a Node hosting service such as Render, Railway, Fly.io, or a VPS.
